@@ -1,27 +1,80 @@
 document.addEventListener("DOMContentLoaded", () => {
-  // Loading page animation
+  // Loading page elements
   const loadingPage = document.getElementById("loading-page");
   const loadingText = document.querySelector(".loading-content h1");
   const progressCounter = document.getElementById("progress-counter");
-  const circles = document.querySelectorAll(".circle");
 
-  // GSAP animation for the loading page
+  // Greetings (iPhone-like boot greetings)
+  const greetings = [
+    "Hello", "Hi", "Hola", "Bonjour", "Ciao", "Hallo", "Olá", "Привет",
+    "नमस्ते", "سلام", "こんにちは", "你好", "안녕하세요", "Hej", "Γειά", "שלום"
+  ];
+
+  // Create greeting element once
+  const greetingsContainer = document.createElement("div");
+  greetingsContainer.className = "greetings-container";
+  const greetingSpan = document.createElement("span");
+  greetingSpan.className = "greeting";
+  greetingsContainer.appendChild(greetingSpan);
+  loadingPage.querySelector(".loading-content")?.appendChild(greetingsContainer);
+
+  // Basic inline styles so it works without editing CSS
+  Object.assign(greetingsContainer.style, {
+    position: "absolute",
+    inset: "0",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    pointerEvents: "none",
+    zIndex: "9999",
+    transition: "background-color 0.25s ease"
+  });
+  Object.assign(greetingSpan.style, {
+    fontSize: "48px",
+    fontWeight: "700",
+    opacity: "0",
+    transform: "scale(0.9)",
+    whiteSpace: "nowrap",
+    transition: "opacity 0.25s ease, transform 0.25s ease",
+    zIndex: "10000"
+  });
+
+  // Keep colors in sync with theme and ensure contrast
+  function updateGreetingColor() {
+    const isDark = document.body.getAttribute("data-theme") === "dark";
+
+    // Make loading page match current theme
+    loadingPage.style.backgroundColor = isDark ? "#000000" : "#ffffff";
+    loadingPage.style.transition = "background-color 0.25s ease";
+
+    // Foreground colors
+    const fg = isDark ? "#ffffff" : "#000000";
+    greetingSpan.style.color = fg;
+    if (loadingText) loadingText.style.color = fg;
+    if (progressCounter) progressCounter.style.color = fg;
+
+    // Shadow for contrast (white text gets dark shadow; black text gets light halo)
+    greetingSpan.style.textShadow = isDark
+      ? "0 1px 3px rgba(0,0,0,0.6)"
+      : "0 1px 2px rgba(255,255,255,0.9)";
+  }
+  updateGreetingColor();
+
+  // Update on theme change (storage used if theme toggled in another tab)
+  window.addEventListener("storage", (e) => {
+    if (e.key === "theme") updateGreetingColor();
+  });
+
+  // GSAP loading animation with greetings sequence
   function playLoadingAnimation() {
     const tl = gsap.timeline();
 
-    // Set initial states
     tl.set(loadingPage, { display: "flex", opacity: 1 })
-      .set(loadingText, { opacity: 0 })
-      .set(circles, { scale: 0, opacity: 0 });
+      .set(loadingText, { opacity: 0 });
 
-    // Animate loading text
-    tl.to(loadingText, {
-      opacity: 1,
-      duration: 1,
-      ease: "power2.out"
-    });
+    tl.to(loadingText, { opacity: 1, duration: 1, ease: "power2.out" });
 
-    // Animate progress counter
+    // Progress counter animation (3s)
     tl.to(progressCounter, {
       innerHTML: "100%",
       duration: 3,
@@ -31,54 +84,125 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }, "-=1");
 
-    // Animate background circles
-    tl.to(circles, {
-      scale: 1.5,
-      opacity: 0.3,
-      stagger: 0.2,
-      duration: 1,
-      ease: "power2.out"
-    }, "-=3")
-    .to(circles, {
-      scale: 2,
-      opacity: 0,
-      stagger: 0.2,
-      duration: 1,
-      ease: "power2.in"
-    }, "-=1");
+    // Greetings sequence overlapping the progress (approx 3s)
+    const greetTl = gsap.timeline();
+    const totalDisplay = 3;
+    const per = Math.max(0.4, totalDisplay / greetings.length);
+    greetings.forEach((g) => {
+      greetTl.to(greetingSpan, {
+        duration: per * 0.5,
+        opacity: 1,
+        scale: 1,
+        ease: "power2.out",
+        onStart: () => {
+          greetingSpan.textContent = g;
+          updateGreetingColor();
+        }
+      }).to(greetingSpan, {
+        duration: per * 0.5,
+        opacity: 0,
+        scale: 0.9,
+        ease: "power2.in"
+      });
+    });
+    tl.add(greetTl, "-=2.8");
 
     // Fade out loading page
-    tl.to(loadingText, {
-      opacity: 0,
-      duration: 0.5,
-      ease: "power2.in"
-    }, "-=0.5")
-    .to(loadingPage, {
-      opacity: 0,
-      duration: 0.5,
-      ease: "power2.inOut",
-      onComplete: () => {
-        loadingPage.style.display = "none";
-      }
-    });
+    tl.to(loadingText, { opacity: 0, duration: 0.5, ease: "power2.in" }, "-=0.5")
+      .to(loadingPage, {
+        opacity: 0,
+        duration: 0.5,
+        ease: "power2.inOut",
+        onComplete: () => {
+          // start page intro animations then hide loading overlay
+          startPageIntro();
+          setTimeout(() => { loadingPage.style.display = "none"; }, 500);
+        }
+      });
 
     return tl;
   }
 
-  // Play initial loading animation
+  // Play initial animation
   playLoadingAnimation();
 
-  // Portfolio logo click handler
+  // --- Page intro / improved text animations ---
+  function splitTextToSpans(el) {
+    if (!el) return null;
+    const text = el.textContent.trim();
+    el.innerHTML = "";
+    const frag = document.createDocumentFragment();
+    Array.from(text).forEach((ch) => {
+      const span = document.createElement("span");
+      span.className = "char";
+      span.textContent = ch === " " ? "\u00A0" : ch;
+      frag.appendChild(span);
+    });
+    el.appendChild(frag);
+    return el.querySelectorAll(".char");
+  }
+
+  function startPageIntro() {
+    // Elements
+    const introLine = document.querySelector(".section__text__p1");
+    const title = document.querySelector(".title");
+    const subtitle = document.querySelector(".section__text__p2");
+    const buttons = document.querySelectorAll(".btn-container .btn");
+    const profilePic = document.querySelector(".section__pic-container img, .profile-pic");
+    const socials = document.querySelectorAll("#socials-container .icon, .icon");
+
+    // Split title into spans for per-letter animation
+    const titleChars = splitTextToSpans(title);
+
+    const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
+
+    // small delay so the greeting/prompt finishes visually
+    tl.to({}, { duration: 0.08 });
+
+    if (introLine) {
+      tl.from(introLine, { y: 18, opacity: 0, duration: 0.6 }, 0);
+    }
+
+    if (titleChars && titleChars.length) {
+      tl.from(titleChars, {
+        y: 30,
+        opacity: 0,
+        rotateX: -10,
+        duration: 0.8,
+        stagger: 0.02,
+        transformOrigin: "50% 50% -20px"
+      }, 0.06);
+    } else if (title) {
+      tl.from(title, { y: 8, opacity: 0, duration: 0.6 }, 0.06);
+    }
+
+    if (subtitle) {
+      tl.from(subtitle, { y: 20, opacity: 0, duration: 0.6 }, 0.3);
+    }
+
+    if (buttons && buttons.length) {
+      tl.from(buttons, { y: 14, opacity: 0, stagger: 0.12, duration: 0.5 }, 0.45);
+    }
+
+    if (profilePic) {
+      tl.from(profilePic, { scale: 0.85, opacity: 0, duration: 0.8, ease: "back.out(1.4)" }, 0.25);
+    }
+
+    if (socials && socials.length) {
+      tl.from(socials, { y: 12, opacity: 0, stagger: 0.08, duration: 0.45 }, 0.55);
+    }
+  }
+
+  // Portfolio logo click -> replay loading animation
   const portfolioLogo = document.getElementById("portfolio-logo");
-  portfolioLogo.addEventListener("click", () => {
-    // Scroll to top
-    window.scrollTo({ top: 0, behavior: "smooth" });
+  if (portfolioLogo) {
+    portfolioLogo.addEventListener("click", () => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      playLoadingAnimation();
+    });
+  }
 
-    // Play loading animation
-    playLoadingAnimation();
-  });
-
-  // Theme toggle functionality
+  // Theme toggle handlers (call updateGreetingColor after change)
   const themeToggle = document.getElementById('theme-toggle');
   const themeToggleMobile = document.getElementById('theme-toggle-mobile');
 
@@ -90,16 +214,15 @@ document.addEventListener("DOMContentLoaded", () => {
       document.body.setAttribute('data-theme', 'dark');
       localStorage.setItem('theme', 'dark');
     }
+    updateGreetingColor();
   }
+  if (themeToggle) themeToggle.addEventListener('click', toggleTheme);
+  if (themeToggleMobile) themeToggleMobile.addEventListener('click', toggleTheme);
 
-  themeToggle.addEventListener('click', toggleTheme);
-  themeToggleMobile.addEventListener('click', toggleTheme);
-
-  // Check for saved theme preference or use default
+  // Apply saved theme
   const savedTheme = localStorage.getItem('theme');
-  if (savedTheme === 'dark') {
-    document.body.setAttribute('data-theme', 'dark');
-  }
+  if (savedTheme === 'dark') document.body.setAttribute('data-theme', 'dark');
+  updateGreetingColor();
 
   // Your existing functions
   function revealToSpan() {
@@ -251,89 +374,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Three.js scene
-  let scene, camera, renderer, particles, welcomeText;
-
-  function initThreeJS() {
-    scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('loading-background'), alpha: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-
-    // Create particles
-    const geometry = new THREE.BufferGeometry();
-    const vertices = [];
-    const size = 2000;
-
-    for (let i = 0; i < 10000; i++) {
-      const x = (Math.random() - 0.5) * size;
-      const y = (Math.random() - 0.5) * size;
-      const z = (Math.random() - 0.5) * size;
-      vertices.push(x, y, z);
-    }
-
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-
-    const material = new THREE.PointsMaterial({ color: 0xffffff, size: 2 });
-    particles = new THREE.Points(geometry, material);
-    scene.add(particles);
-
-    // Create 3D text
-    const loader = new THREE.FontLoader();
-    loader.load('https://threejs.org/examples/fonts/helvetiker_regular.typeface.json', function(font) {
-      const textGeometry = new THREE.TextGeometry('Welcome to Portfolio', {
-        font: font,
-        size: 80,
-        height: 5,
-        curveSegments: 12,
-        bevelEnabled: true,
-        bevelThickness: 10,
-        bevelSize: 8,
-        bevelOffset: 0,
-        bevelSegments: 5
-      });
-
-      const textMaterial = new THREE.MeshPhongMaterial({ color: 0x00ff00 }); // Green color
-      welcomeText = new THREE.Mesh(textGeometry, textMaterial);
-
-      // Center the text
-      textGeometry.computeBoundingBox();
-      const textWidth = textGeometry.boundingBox.max.x - textGeometry.boundingBox.min.x;
-      welcomeText.position.set(-textWidth / 2, 0, -300);
-
-      scene.add(welcomeText);
-    });
-
-    // Add light for the 3D text
-    const light = new THREE.PointLight(0xffffff, 1, 100);
-    light.position.set(0, 0, 50);
-    scene.add(light);
-
-    camera.position.z = 1000;
-  }
-
-  function animateThreeJS() {
-    requestAnimationFrame(animateThreeJS);
-
-    particles.rotation.x += 0.001;
-    particles.rotation.y += 0.002;
-
-    if (welcomeText) {
-      welcomeText.rotation.y += 0.005;
-    }
-
-    renderer.render(scene, camera);
-  }
-
-  function onWindowResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  }
-
-  initThreeJS();
-  animateThreeJS();
-  window.addEventListener('resize', onWindowResize, false);
+  // Three.js star/background effect removed
+  // If you have a <canvas id="loading-background"> in your HTML you can keep it (empty)
+  // or remove it to avoid an unused element.
+  //
 });
 
 function toggleMenu() {
